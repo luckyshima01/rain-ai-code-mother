@@ -1,13 +1,36 @@
 <script setup lang="ts">
 import { RouterLink, useRouter } from 'vue-router'
 import { computed } from 'vue'
+import { useLoginUserStore } from '@/stores/loginUser.ts'
+import { LogoutOutlined } from '@ant-design/icons-vue'
+import { type MenuProps, message } from 'ant-design-vue'
+import { userLogout } from '@/api/userController.ts'
+
+// 获取登录用户状态
+const loginUserStore = useLoginUserStore()
 
 const router = useRouter()
 
-const menuItems = [
-  { key: '/', label: '首页' },
+const originItems = [
+  { key: '/', label: '主页' },
+  { key: '/admin/userManage', label: '用户管理' },
   { key: '/about', label: '关于' },
 ]
+// 过滤掉没有权限的菜单项
+const filterMenus = (menus = [] as MenuProps['items']) => {
+  return menus?.filter((item) => {
+    const menuKey = item?.key as string
+    if (menuKey?.startsWith('/admin')) {
+      const loginUser = loginUserStore.loginUser
+      if (!loginUser || loginUser?.userRole !== 'admin') {
+        return false
+      }
+    }
+    return true
+  })
+}
+// 展示在菜单栏的路由数组
+const menuItems = computed<MenuProps['items']>(() => filterMenus(originItems))
 
 const selectedKeys = computed(() => {
   return [router.currentRoute.value.path]
@@ -16,12 +39,27 @@ const selectedKeys = computed(() => {
 function handleMenuClick({ key }: { key: string }) {
   router.push(key)
 }
+
+const doLogout = async () => {
+  const res = await userLogout()
+  if (res.data.code === 0) {
+    loginUserStore.setLoginUser({
+      userName: '未登录',
+    })
+    message.success('退出登录成功')
+    router.push({
+      path: '/user/login',
+    })
+  } else {
+    message.error('退出登录失败' + res.data.message)
+  }
+}
 </script>
 
 <template>
   <div class="global-header">
     <div class="header-left">
-      <RouterLink to="/public" class="logo-link">
+      <RouterLink to="/" class="logo-link">
         <img src="/logo.png" alt="logo" class="logo" />
         <span class="site-title">Rain AI</span>
       </RouterLink>
@@ -38,7 +76,25 @@ function handleMenuClick({ key }: { key: string }) {
     </div>
 
     <div class="header-right">
-      <a-button type="primary">登录</a-button>
+      <div v-if="loginUserStore.loginUser.id">
+        <a-dropdown>
+          <a-space>
+            <a-avatar :src="loginUserStore.loginUser.userAvatar" />
+            {{ loginUserStore.loginUser.userName ?? '无名' }}
+          </a-space>
+          <template #overlay>
+            <a-menu>
+              <a-menu-item @click="doLogout">
+                <LogoutOutlined />
+                退出登录
+              </a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
+      </div>
+      <div v-else>
+        <a-button type="primary" href="/user/login">登录</a-button>
+      </div>
     </div>
   </div>
 </template>
