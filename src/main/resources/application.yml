@@ -1,6 +1,8 @@
 spring:
   application:
     name: rain-ai-code-mother-backend
+  profiles:
+    active: local
   #mysql
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -23,7 +25,28 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
 # 安全配置
-security:
-  password:
-    salt: FavE0PsrBv97iXNIV/b3IA==
+# 密码盐值（可以用 generator包下的 SaltGenerator 来生成） 固定后请勿随意更换，会导致原有密码无法登录
+#security:
+#  password:
+#    salt: FavE0PsrBv97iXNIV/b3IA==
+# AI
+#langchain4j:
+#  open-ai:
+#    chat-model:
+#      base-url: https://api.deepseek.com
+#      api-key: <Your API Key>
+#      model-name: deepseek-chat
+#      max-tokens: 8192
+#      strict-json-schema: true
+#      response-format: json_object
+#      log-requests: true
+#      log-responses: true
+#    streaming-chat-model:
+#      base-url: https://api.deepseek.com
+#      api-key: <Your API Key>
+#      model-name: deepseek-chat
+#      max-tokens: 8192
+#      log-requests: true
+#      log-responses: true

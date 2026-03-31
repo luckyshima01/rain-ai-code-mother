@@ -40,6 +40,7 @@ function handleMenuClick({ key }: { key: string }) {
   router.push(key)
 }
 
+// 退出登录
 const doLogout = async () => {
   const res = await userLogout()
   if (res.data.code === 0) {
