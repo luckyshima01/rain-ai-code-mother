@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { RouterLink, useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, h } from 'vue'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
-import { LogoutOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, HomeOutlined, LogoutOutlined, TeamOutlined } from '@ant-design/icons-vue'
 import { type MenuProps, message } from 'ant-design-vue'
 import { userLogout } from '@/api/userController.ts'
 
@@ -12,9 +12,9 @@ const loginUserStore = useLoginUserStore()
 const router = useRouter()
 
 const originItems = [
-  { key: '/', label: '主页' },
-  { key: '/admin/userManage', label: '用户管理' },
-  { key: '/about', label: '关于' },
+  { key: '/', icon: h(HomeOutlined), label: h('span', { class: 'menu-label' }, '主页') },
+  { key: '/admin/userManage', icon: h(TeamOutlined), label: h('span', { class: 'menu-label' }, '用户管理') },
+  { key: '/admin/appManage', icon: h(AppstoreOutlined), label: h('span', { class: 'menu-label' }, '应用管理') },
 ]
 // 过滤掉没有权限的菜单项
 const filterMenus = (menus = [] as MenuProps['items']) => {
@@ -146,6 +146,24 @@ const doLogout = async () => {
 .nav-menu {
   border-bottom: none !important;
   line-height: 62px;
+}
+
+/* Hide the default full-width bottom indicator */
+:deep(.nav-menu.ant-menu-horizontal > .ant-menu-item::after),
+:deep(.nav-menu.ant-menu-horizontal > .ant-menu-item-selected::after),
+:deep(.nav-menu.ant-menu-horizontal > .ant-menu-item:hover::after) {
+  border-bottom: none !important;
+}
+
+/* Small gap between icon and text */
+:deep(.nav-menu .ant-menu-item .anticon) {
+  margin-right: 5px;
+}
+
+/* Underline only under the text label */
+:deep(.nav-menu .ant-menu-item-selected .menu-label) {
+  border-bottom: 2px solid #1677ff;
+  padding-bottom: 1px;
 }
 
 .header-right {
