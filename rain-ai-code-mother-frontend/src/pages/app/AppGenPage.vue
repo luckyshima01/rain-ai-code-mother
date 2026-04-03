@@ -43,7 +43,24 @@
       <div class="chat-panel">
         <!-- Messages Area -->
         <div ref="messagesRef" class="messages-area">
-          <div v-if="messages.length === 0 && !generating" class="empty-messages">
+          <!-- Initial history loading spinner -->
+          <div v-if="historyLoading && messages.length === 0" class="history-init-loading">
+            <a-spin size="small" />
+            <span>加载历史消息...</span>
+          </div>
+
+          <!-- Load more (top of list → loads older messages) -->
+          <div v-if="hasMoreHistory && messages.length > 0" class="load-more-bar">
+            <a-spin v-if="historyLoading" size="small" />
+            <span
+              v-else
+              class="load-more-text"
+              @click="!generating && handleLoadMore()"
+            >加载更多历史消息</span>
+          </div>
+
+          <!-- Empty state -->
+          <div v-if="messages.length === 0 && !generating && !historyLoading" class="empty-messages">
             <img src="/logo.png" alt="logo" class="empty-logo" />
             <p>暂无对话，请在下方输入提示词开始生成</p>
           </div>
@@ -62,7 +79,6 @@
                 <div class="msg-bubble ai-bubble">
                   <a-spin v-if="msg.loading && !msg.content" size="small" />
                   <template v-else>
-                    <!-- Render parsed Markdown; blink cursor appended after -->
                     <div class="md-body" v-html="renderMarkdown(msg.content)" />
                     <span v-if="msg.loading" class="cursor-blink">|</span>
                   </template>
@@ -73,17 +89,17 @@
               </div>
             </template>
 
-            <!-- User message -->
+            <!-- User message: avatar first in DOM so row-reverse places it on the far right -->
             <template v-else>
-              <div class="msg-content user-content">
-                <div class="msg-bubble user-bubble">
-                  <p class="msg-text">{{ msg.content }}</p>
-                </div>
-              </div>
               <div class="msg-avatar user-avatar">
                 <a-avatar :src="loginUserStore.loginUser.userAvatar" :size="32">
                   {{ loginUserStore.loginUser.userName?.[0] ?? 'U' }}
                 </a-avatar>
+              </div>
+              <div class="msg-content user-content">
+                <div class="msg-bubble user-bubble">
+                  <span class="msg-text">{{ msg.content }}</span>
+                </div>
               </div>
             </template>
           </div>
@@ -217,6 +233,7 @@ import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import { deployApp, getAppVoById } from '@/api/appController.ts'
+import { listAppChatHistory } from '@/api/chatHistoryController.ts'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
 
 // ---- Markdown renderer setup ----
@@ -252,8 +269,6 @@ const router = useRouter()
 const loginUserStore = useLoginUserStore()
 
 const appId = route.params.appId as string
-/** When navigated with ?view=1, treat as view-only and skip auto-send */
-const viewOnly = route.query.view === '1'
 
 const app = ref<API.AppVO | null>(null)
 
@@ -273,23 +288,89 @@ const messagesRef = ref<HTMLElement | null>(null)
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 let eventSource: EventSource | null = null
 
+// ---- Chat history state ----
+const historyLoading = ref(false)
+const hasMoreHistory = ref(false)
+/** createTime of the oldest loaded message, used as cursor for "load more" */
+const oldestHistoryTime = ref<string | undefined>(undefined)
+
+const PAGE_SIZE = 10
+
+const loadHistory = async (loadMore = false) => {
+  historyLoading.value = true
+  try {
+    const params: API.listAppChatHistoryParams = {
+      appId: appId as unknown as number,
+      pageSize: PAGE_SIZE,
+    }
+    if (loadMore && oldestHistoryTime.value) {
+      params.lastCreateTime = oldestHistoryTime.value
+    }
+
+    const res = await listAppChatHistory(params)
+    if (res.data.code === 0 && res.data.data) {
+      const records = res.data.data.records ?? []
+
+      // API returns newest-first; reverse so oldest is at the top
+      const loginUserId = loginUserStore.loginUser?.id
+      const histMsgs: ChatMessage[] = [...records].reverse().map((r) => {
+        const typeUpper = (r.messageType ?? '').toUpperCase()
+        let role: 'user' | 'assistant'
+        if (typeUpper === 'AI' || typeUpper === 'ASSISTANT') {
+          role = 'assistant'
+        } else if (typeUpper === 'USER') {
+          role = 'user'
+        } else {
+          // Fallback: if the message's userId matches current user → user msg, else AI
+          role =
+            loginUserId && r.userId && String(r.userId) === String(loginUserId)
+              ? 'user'
+              : 'assistant'
+        }
+        return { role, content: r.message ?? '', time: r.createTime }
+      })
+
+      if (loadMore) {
+        messages.value = [...histMsgs, ...messages.value]
+      } else {
+        messages.value = histMsgs
+      }
+
+      // Cursor = createTime of the oldest message we have (first in the reversed list)
+      if (histMsgs.length > 0) {
+        oldestHistoryTime.value = histMsgs[0].time
+      }
+
+      hasMoreHistory.value = records.length >= PAGE_SIZE
+    }
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+/** Load older messages while maintaining the current scroll position */
+const handleLoadMore = async () => {
+  const el = messagesRef.value
+  const prevScrollHeight = el?.scrollHeight ?? 0
+  await loadHistory(true)
+  await nextTick()
+  if (el) {
+    el.scrollTop = el.scrollHeight - prevScrollHeight
+  }
+}
+
+// ---- Deploy state ----
 const deploying = ref(false)
 const deployModalVisible = ref(false)
 const deployUrl = ref('')
 
 const appDetailVisible = ref(false)
 
-/** sessionStorage key to ensure initPrompt is auto-sent only once per session per app */
-const initSentKey = `appGen_initSent_${appId}`
-
 const fetchAppDetail = async () => {
   try {
-    const res = await getAppVoById({ id: appId })
+    const res = await getAppVoById({ id: appId as unknown as number })
     if (res.data.code === 0 && res.data.data) {
       app.value = res.data.data
-      if (app.value.codeGenType) {
-        previewUrl.value = `${PREVIEW_BASE_URL}/static/${app.value.codeGenType}_${appId}/`
-      }
     }
   } catch {
     message.error('获取应用信息失败')
@@ -318,7 +399,6 @@ const sendMessage = (content: string) => {
     eventSource = null
   }
 
-  // Flag to prevent onerror from double-processing after a clean "done" event
   let streamDone = false
 
   const finishGeneration = () => {
@@ -328,6 +408,7 @@ const sendMessage = (content: string) => {
     }
     messages.value[aiMsgIndex].loading = false
     generating.value = false
+    // Always show preview after a completed generation
     fetchAppDetail().then(() => {
       if (app.value?.codeGenType) {
         previewUrl.value = `${PREVIEW_BASE_URL}/static/${app.value.codeGenType}_${appId}/`
@@ -339,25 +420,21 @@ const sendMessage = (content: string) => {
   const url = `${BASE_API_URL}/app/chat/gen/code?appId=${appId}&message=${encodeURIComponent(content)}`
   eventSource = new EventSource(url, { withCredentials: true })
 
-  // Each data event carries JSON: {"d": "chunk"}  — parse and extract the text
   eventSource.onmessage = (event: MessageEvent) => {
     try {
       const parsed = JSON.parse(event.data) as { d: string }
       messages.value[aiMsgIndex].content += parsed.d ?? ''
     } catch {
-      // Fallback: treat as plain text if parsing fails
       messages.value[aiMsgIndex].content += event.data
     }
     scrollToBottom()
   }
 
-  // Server sends a final event with event:"done" to signal clean stream end
   eventSource.addEventListener('done', () => {
     streamDone = true
     finishGeneration()
   })
 
-  // onerror handles genuine connection failures; ignore it after a clean "done"
   eventSource.onerror = () => {
     if (!streamDone) {
       finishGeneration()
@@ -379,7 +456,7 @@ const handleDeploy = async () => {
   }
   deploying.value = true
   try {
-    const res = await deployApp({ appId })
+    const res = await deployApp({ appId: appId as unknown as number })
     if (res.data.code === 0 && res.data.data) {
       deployUrl.value = res.data.data
       deployModalVisible.value = true
@@ -392,9 +469,7 @@ const handleDeploy = async () => {
   }
 }
 
-const openDeployUrl = () => {
-  window.open(deployUrl.value, '_blank')
-}
+const openDeployUrl = () => window.open(deployUrl.value, '_blank')
 
 const copyDeployUrl = () => {
   navigator.clipboard.writeText(deployUrl.value).then(() => {
@@ -409,29 +484,30 @@ const refreshPreview = () => {
 }
 
 const openInNewTab = () => {
-  if (previewUrl.value) {
-    window.open(previewUrl.value, '_blank')
-  }
+  if (previewUrl.value) window.open(previewUrl.value, '_blank')
 }
 
-const goToEdit = () => {
-  router.push(`/app/edit/${appId}`)
-}
+const goToEdit = () => router.push(`/app/edit/${appId}`)
 
 const formatTime = (time?: string) => {
   if (!time) return ''
   return dayjs(time).format('HH:mm')
 }
 
-
 onMounted(async () => {
   await fetchAppDetail()
-  // Skip auto-send when navigated in view-only mode (?view=1) or not the owner
-  if (viewOnly) return
-  // Auto-send initPrompt only once per session (not on every page refresh)
-  const initAlreadySent = sessionStorage.getItem(initSentKey)
-  if (!initAlreadySent && app.value?.initPrompt && canChat.value) {
-    sessionStorage.setItem(initSentKey, '1')
+  await loadHistory()
+
+  // Show preview if app is already generated and there are enough messages
+  if (app.value?.codeGenType && messages.value.length >= 2) {
+    previewUrl.value = `${PREVIEW_BASE_URL}/static/${app.value.codeGenType}_${appId}/`
+  }
+
+  // Scroll to newest message after loading history
+  scrollToBottom()
+
+  // Auto-send initPrompt only if: own app + no history at all
+  if (canChat.value && messages.value.length === 0 && app.value?.initPrompt) {
     sendMessage(app.value.initPrompt)
   }
 })
@@ -528,6 +604,36 @@ onUnmounted(() => {
   gap: 14px;
 }
 
+/* History loading states */
+.history-init-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: #999;
+  font-size: 13px;
+}
+
+.load-more-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px 0 10px;
+}
+
+.load-more-text {
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.load-more-text:hover {
+  color: #1677ff;
+}
+
 .empty-messages {
   display: flex;
   flex-direction: column;
@@ -602,122 +708,13 @@ onUnmounted(() => {
   border-radius: 2px 12px 12px 12px;
 }
 
-/* ---- Markdown body ---- */
-.md-body {
-  font-size: 13px;
-  line-height: 1.7;
-  color: #1a1a1a;
+.msg-text {
+  white-space: pre-wrap;
   word-break: break-word;
-  overflow-wrap: break-word;
-}
-
-.md-body :deep(p) {
-  margin: 0 0 8px;
-}
-.md-body :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.md-body :deep(h1),
-.md-body :deep(h2),
-.md-body :deep(h3),
-.md-body :deep(h4) {
-  margin: 12px 0 6px;
-  font-weight: 600;
-  line-height: 1.3;
-  color: #111;
-}
-.md-body :deep(h1) { font-size: 18px; }
-.md-body :deep(h2) { font-size: 16px; }
-.md-body :deep(h3) { font-size: 14px; }
-.md-body :deep(h4) { font-size: 13px; }
-
-.md-body :deep(ul),
-.md-body :deep(ol) {
-  margin: 4px 0 8px;
-  padding-left: 20px;
-}
-.md-body :deep(li) {
-  margin-bottom: 2px;
-}
-
-.md-body :deep(blockquote) {
-  border-left: 3px solid #d0d7de;
-  margin: 8px 0;
-  padding: 4px 12px;
-  color: #57606a;
-  background: #f6f8fa;
-  border-radius: 0 4px 4px 0;
-}
-
-.md-body :deep(a) {
-  color: #1677ff;
-  text-decoration: none;
-}
-.md-body :deep(a:hover) {
-  text-decoration: underline;
-}
-
-.md-body :deep(hr) {
-  border: none;
-  border-top: 1px solid #e8e8e8;
-  margin: 10px 0;
-}
-
-/* Inline code */
-.md-body :deep(code) {
-  background: #eef0f3;
-  border-radius: 4px;
-  padding: 1px 5px;
-  font-size: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  color: #d63384;
-}
-
-/* Code block (from highlight function) */
-.md-body :deep(.md-code-block) {
-  margin: 10px 0;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #f6f8fa;
-  border: 1px solid #e8eaed;
-}
-.md-body :deep(.md-code-block code) {
-  background: transparent;
+  margin: 0;
   padding: 0;
-  color: inherit;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
-  display: block;
-  overflow-x: auto;
-  padding: 12px 14px;
-}
-.md-body :deep(.md-code-lang) {
-  font-size: 11px;
-  color: #666;
-  background: #eef0f3;
-  padding: 4px 12px;
-  border-bottom: 1px solid #e8eaed;
-  font-family: monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Tables */
-.md-body :deep(table) {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 8px 0;
-  font-size: 12px;
-}
-.md-body :deep(th),
-.md-body :deep(td) {
-  border: 1px solid #d0d7de;
-  padding: 5px 10px;
-}
-.md-body :deep(th) {
-  background: #f6f8fa;
-  font-weight: 600;
 }
 
 .cursor-blink {
@@ -772,7 +769,6 @@ onUnmounted(() => {
   background: #f0f2f5;
 }
 
-/* Loading state while generating */
 .preview-loading {
   flex: 1;
   display: flex;
@@ -790,7 +786,6 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
-/* Empty state */
 .preview-empty {
   flex: 1;
   display: flex;
@@ -821,7 +816,6 @@ onUnmounted(() => {
   color: #ccc;
 }
 
-/* Preview content */
 .preview-content {
   flex: 1;
   display: flex;
@@ -883,5 +877,90 @@ onUnmounted(() => {
   justify-content: center;
   gap: 12px;
 }
+</style>
 
+<!-- Global styles for v-html markdown content (scoped :deep doesn't reliably style injected HTML) -->
+<style>
+.md-body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #1a1a1a;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.md-body p { margin: 0 0 8px; }
+.md-body p:last-child { margin-bottom: 0; }
+
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  margin: 12px 0 6px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #111;
+}
+.md-body h1 { font-size: 18px; }
+.md-body h2 { font-size: 16px; }
+.md-body h3 { font-size: 14px; }
+.md-body h4 { font-size: 13px; }
+
+.md-body ul,
+.md-body ol { margin: 4px 0 8px; padding-left: 20px; }
+.md-body li { margin-bottom: 2px; }
+
+.md-body blockquote {
+  border-left: 3px solid #d0d7de;
+  margin: 8px 0;
+  padding: 4px 12px;
+  color: #57606a;
+  background: #f6f8fa;
+  border-radius: 0 4px 4px 0;
+}
+
+.md-body a { color: #1677ff; text-decoration: none; }
+.md-body a:hover { text-decoration: underline; }
+.md-body hr { border: none; border-top: 1px solid #e8e8e8; margin: 10px 0; }
+
+.md-body code {
+  background: #eef0f3;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  color: #d63384;
+}
+
+.md-body .md-code-block {
+  margin: 10px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f6f8fa;
+  border: 1px solid #e8eaed;
+}
+.md-body .md-code-block code {
+  background: transparent;
+  padding: 12px 14px;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  display: block;
+  overflow-x: auto;
+}
+.md-body .md-code-lang {
+  font-size: 11px;
+  color: #666;
+  background: #eef0f3;
+  padding: 4px 12px;
+  border-bottom: 1px solid #e8eaed;
+  font-family: monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.md-body table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
+.md-body th,
+.md-body td { border: 1px solid #d0d7de; padding: 5px 10px; }
+.md-body th { background: #f6f8fa; font-weight: 600; }
 </style>

@@ -47,7 +47,7 @@ const props = withDefaults(defineProps<Props>(), { showMeta: false })
 const router = useRouter()
 
 const goToApp = () => {
-  router.push(`/app/${props.app.id}?view=1`)
+  router.push(`/app/${props.app.id}`)
 }
 
 const openDeployedApp = () => {

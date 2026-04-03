@@ -2,7 +2,7 @@
 import { RouterLink, useRouter } from 'vue-router'
 import { computed, h } from 'vue'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
-import { AppstoreOutlined, HomeOutlined, LogoutOutlined, TeamOutlined } from '@ant-design/icons-vue'
+import { AppstoreOutlined, CommentOutlined, HomeOutlined, LogoutOutlined, TeamOutlined } from '@ant-design/icons-vue'
 import { type MenuProps, message } from 'ant-design-vue'
 import { userLogout } from '@/api/userController.ts'
 
@@ -15,6 +15,7 @@ const originItems = [
   { key: '/', icon: h(HomeOutlined), label: h('span', { class: 'menu-label' }, '主页') },
   { key: '/admin/userManage', icon: h(TeamOutlined), label: h('span', { class: 'menu-label' }, '用户管理') },
   { key: '/admin/appManage', icon: h(AppstoreOutlined), label: h('span', { class: 'menu-label' }, '应用管理') },
+  { key: '/admin/chatHistoryManage', icon: h(CommentOutlined), label: h('span', { class: 'menu-label' }, '对话管理') },
 ]
 // 过滤掉没有权限的菜单项
 const filterMenus = (menus = [] as MenuProps['items']) => {
