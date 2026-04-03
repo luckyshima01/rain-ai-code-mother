@@ -8,6 +8,7 @@ import cloud.raina.rainaicodemother.model.entity.App;
 import cloud.raina.rainaicodemother.model.entity.User;
 import cloud.raina.rainaicodemother.model.enums.ChatHistoryMessageTypeEnum;
 import cloud.raina.rainaicodemother.service.AppService;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -15,19 +16,25 @@ import com.mybatisflex.spring.service.impl.ServiceImpl;
 import cloud.raina.rainaicodemother.model.entity.ChatHistory;
 import cloud.raina.rainaicodemother.mapper.ChatHistoryMapper;
 import cloud.raina.rainaicodemother.service.ChatHistoryService;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
- *  服务层实现。
+ * 服务层实现。
  *
  * @author LuckyShima
  */
 @Service
-public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatHistory>  implements ChatHistoryService{
+@Slf4j
+public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatHistory> implements ChatHistoryService {
     @Resource
     @Lazy
     private AppService appService;
@@ -81,6 +88,38 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         return this.page(Page.of(1, pageSize), queryWrapper);
     }
 
+    @Override
+    public int loadAppChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount) {
+        try {
+            QueryWrapper queryWrapper = QueryWrapper.create()
+                    .eq(ChatHistory::getAppId, appId)
+                    .orderBy(ChatHistory::getCreateTime, false)
+                    .limit(1, maxCount);
+            List<ChatHistory> historyList = this.list(queryWrapper);
+            if (CollUtil.isEmpty(historyList)) {
+                return 0;
+            }
+            // 反转列表，按照时间正序（旧的在前，新的在后）
+            historyList = historyList.reversed();
+            // 按照时间顺序将消息添加到记忆中
+            int loadedCount = 0;
+            // 清理历史记录缓存，防止重复加载
+            chatMemory.clear();
+            for (ChatHistory history : historyList) {
+                if (ChatHistoryMessageTypeEnum.USER.getValue().equals(history.getMessageType())) {
+                    chatMemory.add(UserMessage.from(history.getMessage()));
+                } else if (ChatHistoryMessageTypeEnum.AI.getValue().equals(history.getMessageType())) {
+                    chatMemory.add(AiMessage.from(history.getMessage()));
+                }
+                loadedCount++;
+            }
+            log.info("appId：{}加载了{}条历史记录到内存中", appId, loadedCount);
+            return loadedCount;
+        } catch (Exception e) {
+            log.error("appId：{}加载历史记录到内存出错，error：{}", appId, e.getMessage(), e);
+            return 0;
+        }
+    }
 
     /**
      * 获取查询包装类
