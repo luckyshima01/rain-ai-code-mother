@@ -254,8 +254,7 @@ const md = new MarkdownIt({
 
 const renderMarkdown = (content: string): string => md.render(content)
 
-const BASE_API_URL = import.meta.env.VITE_API_BASE_URL as string
-const PREVIEW_BASE_URL = import.meta.env.VITE_PREVIEW_BASE_URL as string
+import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -411,13 +410,13 @@ const sendMessage = (content: string) => {
     // Always show preview after a completed generation
     fetchAppDetail().then(() => {
       if (app.value?.codeGenType) {
-        previewUrl.value = `${PREVIEW_BASE_URL}/static/${app.value.codeGenType}_${appId}/`
+        previewUrl.value = getStaticPreviewUrl(app.value.codeGenType, appId)
       }
     })
     scrollToBottom()
   }
 
-  const url = `${BASE_API_URL}/app/chat/gen/code?appId=${appId}&message=${encodeURIComponent(content)}`
+  const url = `${API_BASE_URL}/app/chat/gen/code?appId=${appId}&message=${encodeURIComponent(content)}`
   eventSource = new EventSource(url, { withCredentials: true })
 
   eventSource.onmessage = (event: MessageEvent) => {
@@ -500,7 +499,7 @@ onMounted(async () => {
 
   // Show preview if app is already generated and there are enough messages
   if (app.value?.codeGenType && messages.value.length >= 2) {
-    previewUrl.value = `${PREVIEW_BASE_URL}/static/${app.value.codeGenType}_${appId}/`
+    previewUrl.value = getStaticPreviewUrl(app.value.codeGenType, appId)
   }
 
   // Scroll to newest message after loading history

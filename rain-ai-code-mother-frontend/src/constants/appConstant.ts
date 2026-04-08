@@ -6,6 +6,7 @@ export const CODE_GEN_TYPE_OPTIONS = [
   { label: '全部', value: '' },
   { label: '原生 HTML 模式', value: 'html' },
   { label: '原生多文件模式', value: 'multi_file' },
+  { label: 'Vue 项目模式', value: 'vue_project' },
 ] as const
 
 export type CodeGenTypeValue = (typeof CODE_GEN_TYPE_OPTIONS)[number]['value']
@@ -14,4 +15,5 @@ export type CodeGenTypeValue = (typeof CODE_GEN_TYPE_OPTIONS)[number]['value']
 export const CODE_GEN_TYPE_LABEL: Record<string, string> = {
   html: '原生 HTML 模式',
   multi_file: '原生多文件模式',
+  vue_project: 'Vue 项目模式',
 }

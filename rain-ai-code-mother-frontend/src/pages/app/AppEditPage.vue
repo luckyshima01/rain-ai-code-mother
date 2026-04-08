@@ -123,7 +123,7 @@
           <span class="meta-value">
             <a
               v-if="appDetail?.deployKey"
-              :href="`${deployBaseUrl}/${appDetail.deployKey}`"
+              :href="getDeployUrl(appDetail.deployKey)"
               target="_blank"
               class="meta-link"
             >查看预览</a>
@@ -142,9 +142,8 @@ import { message } from 'ant-design-vue'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { getAppVoById, getAppVoByIdByAdmin, updateApp, updateAppByAdmin } from '@/api/appController.ts'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
+import { getDeployUrl } from '@/config/env'
 import dayjs from 'dayjs'
-
-const deployBaseUrl = import.meta.env.VITE_DEPLOY_BASE_URL as string
 
 const route = useRoute()
 const router = useRouter()

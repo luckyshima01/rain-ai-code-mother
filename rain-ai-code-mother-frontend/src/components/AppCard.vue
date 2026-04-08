@@ -32,6 +32,7 @@ import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import zhCn from 'dayjs/locale/zh-cn'
 import { CODE_GEN_TYPE_LABEL } from '@/constants/appConstant.ts'
+import { getDeployUrl } from '@/config/env'
 
 dayjs.extend(relativeTime)
 dayjs.locale(zhCn)
@@ -52,8 +53,7 @@ const goToApp = () => {
 
 const openDeployedApp = () => {
   if (props.app.deployKey) {
-    const deployBase = import.meta.env.VITE_DEPLOY_BASE_URL as string
-    window.open(`${deployBase}/${props.app.deployKey}`, '_blank')
+    window.open(getDeployUrl(props.app.deployKey), '_blank')
   }
 }
 
