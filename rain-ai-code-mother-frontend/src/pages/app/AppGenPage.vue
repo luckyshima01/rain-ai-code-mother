@@ -26,6 +26,14 @@
           应用详情
         </a-button>
         <a-button
+          :loading="downloading"
+          :disabled="!app?.codeGenType || generating"
+          @click="handleDownload"
+        >
+          <template #icon><DownloadOutlined /></template>
+          下载代码
+        </a-button>
+        <a-button
           type="primary"
           :loading="deploying"
           :disabled="!app?.codeGenType || generating"
@@ -221,6 +229,7 @@ import {
   CheckCircleOutlined,
   CloudUploadOutlined,
   CopyOutlined,
+  DownloadOutlined,
   DownOutlined,
   EditOutlined,
   InfoCircleOutlined,
@@ -232,7 +241,7 @@ import dayjs from 'dayjs'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
-import { deployApp, getAppVoById } from '@/api/appController.ts'
+import { deployApp, downloadAppCode, getAppVoById } from '@/api/appController.ts'
 import { listAppChatHistory } from '@/api/chatHistoryController.ts'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
 
@@ -363,6 +372,9 @@ const deploying = ref(false)
 const deployModalVisible = ref(false)
 const deployUrl = ref('')
 
+// ---- Download state ----
+const downloading = ref(false)
+
 const appDetailVisible = ref(false)
 
 const fetchAppDetail = async () => {
@@ -465,6 +477,40 @@ const handleDeploy = async () => {
     }
   } finally {
     deploying.value = false
+  }
+}
+
+const handleDownload = async () => {
+  if (!app.value?.codeGenType) {
+    message.warning('请先生成应用代码')
+    return
+  }
+  downloading.value = true
+  try {
+    const res = await downloadAppCode(
+      { appId: appId as unknown as number },
+      { responseType: 'blob' },
+    )
+    const blob = res.data as Blob
+    const disposition: string = res.headers?.['content-disposition'] ?? ''
+    let fileName = `${appId}.zip`
+    const match = disposition.match(/filename="?([^";\r\n]+)"?/)
+    if (match?.[1]) {
+      fileName = decodeURIComponent(match[1])
+    }
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = fileName
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+    message.success('下载成功')
+  } catch {
+    message.error('下载代码失败')
+  } finally {
+    downloading.value = false
   }
 }
 
