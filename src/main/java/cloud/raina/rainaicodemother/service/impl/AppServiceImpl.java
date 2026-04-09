@@ -17,6 +17,7 @@ import cloud.raina.rainaicodemother.model.vo.AppVO;
 import cloud.raina.rainaicodemother.model.vo.UserVO;
 import cloud.raina.rainaicodemother.service.AppService;
 import cloud.raina.rainaicodemother.service.ChatHistoryService;
+import cloud.raina.rainaicodemother.service.ScreenshotService;
 import cloud.raina.rainaicodemother.service.UserService;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
@@ -58,6 +59,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private StreamHandlerExecutor streamHandlerExecutor;
     @Resource
     private VueProjectBuilder vueProjectBuilder;
+    @Resource
+    private ScreenshotService screenshotService;
 
     @Override
     public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
@@ -132,8 +135,31 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
-        // 10.返回可访问的 URL地址
-        return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 10.得到可访问的 URL地址
+        String appDeployUrl = String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 11.异步生成截图并且更新应用封面
+        generateAppScreenshotAsync(appId, appDeployUrl);
+        return appDeployUrl;
+    }
+
+    /**
+     * 异步生成应用截图并更新数据库
+     *
+     * @param appId 应用 Id
+     * @param appUrl 应用 URL
+     */
+    @Override
+    public void generateAppScreenshotAsync(Long appId, String appUrl) {
+        Thread.startVirtualThread(() -> {
+            // 调用截图服务生成截图并上传
+            String screenshotUrl = screenshotService.generateAndUploadScreenshot(appUrl);
+            // 更新数据库封面
+            App updateApp = new App();
+            updateApp.setId(appId);
+            updateApp.setCover(screenshotUrl);
+            boolean updated = this.updateById(updateApp);
+            ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新应用封面失败");
+        });
     }
 
     @Override
