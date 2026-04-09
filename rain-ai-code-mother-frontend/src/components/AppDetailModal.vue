@@ -20,6 +20,10 @@
         <span class="app-detail-label">创建时间：</span>
         <span class="app-detail-value">{{ formatDetailTime(app?.createTime) }}</span>
       </div>
+      <div v-if="app?.codeGenType" class="app-detail-row">
+        <span class="app-detail-label">生成类型：</span>
+        <a-tag color="blue" class="app-detail-value">{{ getCodeGenTypeLabel(app.codeGenType) }}</a-tag>
+      </div>
       <div v-if="canEdit" class="app-detail-actions">
         <a-button type="primary" @click="emit('edit')">
           <template #icon><EditOutlined /></template>
@@ -46,6 +50,7 @@ import { message } from 'ant-design-vue'
 import { DeleteOutlined, EditOutlined } from '@ant-design/icons-vue'
 import dayjs from 'dayjs'
 import { deleteApp } from '@/api/appController.ts'
+import { CODE_GEN_TYPE_LABEL } from '@/constants/appConstant.ts'
 
 interface Props {
   open: boolean
@@ -67,6 +72,11 @@ const emit = defineEmits<{
 const formatDetailTime = (time?: string) => {
   if (!time) return '未知'
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+}
+
+const getCodeGenTypeLabel = (type?: string) => {
+  if (!type) return ''
+  return CODE_GEN_TYPE_LABEL[type] ?? type
 }
 
 const handleDelete = async () => {

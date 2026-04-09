@@ -18,7 +18,10 @@
             </a-menu>
           </template>
         </a-dropdown>
-        <span v-else class="app-name-text">加载中...</span>
+        <a-tag v-if="app?.codeGenType" color="blue" class="code-gen-type-tag">
+          {{ getAppTypeLabel(app.codeGenType) }}
+        </a-tag>
+        <span v-else-if="!app" class="app-name-text">加载中...</span>
       </div>
       <div class="top-bar-right">
         <a-button @click="appDetailVisible = true">
@@ -242,6 +245,7 @@ import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github.css'
 import { deployApp, downloadAppCode, getAppVoById } from '@/api/appController.ts'
+import { CODE_GEN_TYPE_LABEL } from '@/constants/appConstant.ts'
 import { listAppChatHistory } from '@/api/chatHistoryController.ts'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
 
@@ -539,6 +543,11 @@ const formatTime = (time?: string) => {
   return dayjs(time).format('HH:mm')
 }
 
+const getAppTypeLabel = (type?: string) => {
+  if (!type) return ''
+  return CODE_GEN_TYPE_LABEL[type] ?? type
+}
+
 onMounted(async () => {
   await fetchAppDetail()
   await loadHistory()
@@ -621,6 +630,11 @@ onUnmounted(() => {
   font-size: 15px;
   font-weight: 500;
   color: #1a1a1a;
+}
+
+.code-gen-type-tag {
+  font-size: 12px;
+  margin: 0;
 }
 
 /* Main Content */
