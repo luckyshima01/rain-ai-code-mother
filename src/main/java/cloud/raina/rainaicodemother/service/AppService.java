@@ -47,6 +47,15 @@ public interface AppService extends IService<App> {
     void generateAppScreenshotAsync(Long appId, String appUrl);
 
     /**
+     * 创建应用
+     *
+     * @param appAddRequest 创建应用请求
+     * @param loginUser     登录用户
+     * @return 应用 Id
+     */
+    Long createApp(AppAddRequest appAddRequest, User loginUser);
+
+    /**
      * 根据查询条件构造数据查询参数（管理员）
      *
      * @param appQueryRequest 查询请求
