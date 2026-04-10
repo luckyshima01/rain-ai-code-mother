@@ -118,6 +118,26 @@
 
         <!-- Input Area -->
         <div class="input-area">
+          <!-- Selected element info (shown when user clicked an element in edit mode) -->
+          <a-alert
+            v-if="selectedElement"
+            type="info"
+            show-icon
+            closable
+            class="selected-element-alert"
+            @close="clearSelectedElement"
+          >
+            <template #message>
+              <span class="selected-el-summary">
+                已选中：
+                <code class="el-token el-tag">&lt;{{ selectedElement.tagName }}&gt;</code>
+                <code v-if="selectedElement.id" class="el-token el-id">#{{ selectedElement.id }}</code>
+                <code v-if="selectedElement.classes" class="el-token el-class">.{{ selectedElement.classes.trim().split(/\s+/).filter(Boolean).join(' .') }}</code>
+                <span v-if="selectedElement.text" class="el-text"> "{{ selectedElement.text.length > 40 ? selectedElement.text.slice(0, 40) + '…' : selectedElement.text }}"</span>
+              </span>
+            </template>
+          </a-alert>
+
           <div class="input-row">
             <a-tooltip
               :title="!canChat ? '无法在别人的作品下对话哦~' : ''"
@@ -131,6 +151,17 @@
                 class="chat-input"
                 @keydown.ctrl.enter="handleSendMessage"
               />
+            </a-tooltip>
+            <a-tooltip :title="!previewUrl ? '请先生成网站' : isEditMode ? '退出可视化编辑' : '可视化编辑元素'">
+              <a-button
+                :type="isEditMode ? 'primary' : 'default'"
+                shape="circle"
+                :disabled="!previewUrl || generating || !canChat"
+                class="edit-mode-btn"
+                @click="toggleEditMode"
+              >
+                <template #icon><HighlightOutlined /></template>
+              </a-button>
             </a-tooltip>
             <a-button
               type="primary"
@@ -183,6 +214,7 @@
             :src="previewUrl"
             class="preview-iframe"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            @load="onIframeLoad"
           />
         </div>
       </div>
@@ -235,10 +267,12 @@ import {
   DownloadOutlined,
   DownOutlined,
   EditOutlined,
+  HighlightOutlined,
   InfoCircleOutlined,
   LinkOutlined,
   ReloadOutlined,
 } from '@ant-design/icons-vue'
+import { useVisualEditor } from '@/utils/useVisualEditor'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import dayjs from 'dayjs'
 import MarkdownIt from 'markdown-it'
@@ -299,6 +333,17 @@ const previewUrl = ref('')
 const messagesRef = ref<HTMLElement | null>(null)
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 let eventSource: EventSource | null = null
+
+const {
+  isEditMode,
+  selectedElement,
+  toggleEditMode,
+  exitEditMode,
+  clearSelectedElement,
+  onIframeLoad,
+  buildPromptWithContext,
+  cleanup: cleanupVisualEditor,
+} = useVisualEditor(iframeRef)
 
 // ---- Chat history state ----
 const historyLoading = ref(false)
@@ -461,7 +506,9 @@ const handleSendMessage = () => {
   const content = inputMessage.value.trim()
   if (!content) return
   inputMessage.value = ''
-  sendMessage(content)
+  const prompt = buildPromptWithContext(content)
+  exitEditMode()
+  sendMessage(prompt)
 }
 
 const handleDeploy = async () => {
@@ -571,6 +618,7 @@ onUnmounted(() => {
     eventSource.close()
     eventSource = null
   }
+  cleanupVisualEditor()
 })
 </script>
 
@@ -908,6 +956,57 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   background: #fff;
+}
+
+/* Visual editor edit-mode toggle button */
+.edit-mode-btn {
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+
+/* Selected element alert */
+.selected-element-alert {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.selected-el-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.el-token {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+.el-tag {
+  background: #e6f4ff;
+  color: #1677ff;
+  border: 1px solid #bae0ff;
+}
+
+.el-id {
+  background: #fff7e6;
+  color: #d46b08;
+  border: 1px solid #ffd591;
+}
+
+.el-class {
+  background: #f6ffed;
+  color: #389e0d;
+  border: 1px solid #b7eb8f;
+}
+
+.el-text {
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
 }
 
 /* Deploy Modal */

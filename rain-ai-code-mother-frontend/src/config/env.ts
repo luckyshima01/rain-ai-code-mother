@@ -5,7 +5,7 @@
 
 // API 基础地址（后端接口 + SSE）
 export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8123/api'
+  import.meta.env.VITE_API_BASE_URL || '/api'
 
 // 应用部署域名（已部署应用的访问根域名）
 export const DEPLOY_DOMAIN: string =
