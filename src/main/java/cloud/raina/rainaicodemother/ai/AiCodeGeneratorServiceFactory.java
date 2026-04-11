@@ -1,6 +1,6 @@
 package cloud.raina.rainaicodemother.ai;
 
-import cloud.raina.rainaicodemother.ai.tools.FileWriteTool;
+import cloud.raina.rainaicodemother.ai.tools.*;
 import cloud.raina.rainaicodemother.exception.BusinessException;
 import cloud.raina.rainaicodemother.exception.ErrorCode;
 import cloud.raina.rainaicodemother.model.enums.CodeGenTypeEnum;
@@ -36,6 +36,8 @@ public class AiCodeGeneratorServiceFactory {
     private RedisChatMemoryStore redisChatMemoryStore;
     @Resource
     private ChatHistoryService chatHistoryService;
+    @Resource
+    private ToolManager toolManager;
 
     private final Cache<String, AiCodeGeneratorService> serviceCache = Caffeine.newBuilder()
             .maximumSize(1000)
@@ -91,7 +93,7 @@ public class AiCodeGeneratorServiceFactory {
                     .chatModel(chatModel)
                     .streamingChatModel(reasoningSteamingChatModel)
                     .chatMemoryProvider(memoryId -> chatMemory)
-                    .tools(new FileWriteTool())
+                    .tools(toolManager.getAllTools())
                     // 处理工具调用幻觉问题
                     .hallucinatedToolNameStrategy(toolExecutionRequest ->
                             ToolExecutionResultMessage.from(toolExecutionRequest,
