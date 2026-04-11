@@ -152,17 +152,6 @@
                 @keydown.ctrl.enter="handleSendMessage"
               />
             </a-tooltip>
-            <a-tooltip :title="!previewUrl ? '请先生成网站' : isEditMode ? '退出可视化编辑' : '可视化编辑元素'">
-              <a-button
-                :type="isEditMode ? 'primary' : 'default'"
-                shape="circle"
-                :disabled="!previewUrl || generating || !canChat"
-                class="edit-mode-btn"
-                @click="toggleEditMode"
-              >
-                <template #icon><HighlightOutlined /></template>
-              </a-button>
-            </a-tooltip>
             <a-button
               type="primary"
               shape="circle"
@@ -199,6 +188,16 @@
           <div class="preview-toolbar">
             <span class="preview-url-text">{{ previewUrl }}</span>
             <a-space>
+              <a-button
+                size="small"
+                :type="isEditMode ? 'primary' : 'default'"
+                :disabled="generating || !canChat"
+                class="edit-mode-btn"
+                @click="toggleEditMode"
+              >
+                <template #icon><EditOutlined /></template>
+                {{ isEditMode ? '退出编辑' : '编辑模式' }}
+              </a-button>
               <a-button size="small" @click="refreshPreview">
                 <template #icon><ReloadOutlined /></template>
                 刷新
@@ -209,6 +208,15 @@
               </a-button>
             </a-space>
           </div>
+          <transition name="edit-hint">
+            <div v-if="isEditMode" class="edit-mode-hint">
+              <span class="edit-mode-hint-dot"></span>
+              <div class="edit-mode-hint-text">
+                <span class="edit-mode-hint-title">编辑模式已开启</span>
+                <span class="edit-mode-hint-desc">悬浮查看元素，点击选中元素</span>
+              </div>
+            </div>
+          </transition>
           <iframe
             ref="iframeRef"
             :src="previewUrl"
@@ -267,7 +275,6 @@ import {
   DownloadOutlined,
   DownOutlined,
   EditOutlined,
-  HighlightOutlined,
   InfoCircleOutlined,
   LinkOutlined,
   ReloadOutlined,
@@ -928,6 +935,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .preview-toolbar {
@@ -958,10 +966,66 @@ onUnmounted(() => {
   background: #fff;
 }
 
-/* Visual editor edit-mode toggle button */
-.edit-mode-btn {
+/* Edit mode hint overlay (floating badge over iframe) */
+.edit-mode-hint {
+  position: absolute;
+  top: 52px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.35);
+  pointer-events: none;
+  user-select: none;
+}
+
+.edit-mode-hint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
   flex-shrink: 0;
-  margin-bottom: 2px;
+  animation: hint-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.75); }
+}
+
+.edit-mode-hint-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.edit-mode-hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.edit-mode-hint-desc {
+  font-size: 11px;
+  opacity: 0.85;
+  line-height: 1.3;
+}
+
+/* Fade transition for the hint */
+.edit-hint-enter-active,
+.edit-hint-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.edit-hint-enter-from,
+.edit-hint-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 /* Selected element alert */
