@@ -2,10 +2,12 @@ package cloud.raina.rainaicodemother.common;
 
 import cloud.raina.rainaicodemother.exception.ErrorCode;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 
 @Data
+@NoArgsConstructor
 public class BaseResponse<T> implements Serializable {
 
     private int code;
