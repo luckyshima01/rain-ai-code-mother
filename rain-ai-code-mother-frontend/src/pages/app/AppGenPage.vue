@@ -502,6 +502,27 @@ const sendMessage = (content: string) => {
     finishGeneration()
   })
 
+  eventSource.addEventListener('business-error', (event: MessageEvent) => {
+    if (streamDone) return
+    try {
+      const errorData = JSON.parse(event.data)
+      console.error('SSE业务错误事件:', errorData)
+      const errorMessage = errorData.message || '生成过程中出现错误'
+      messages.value[aiMsgIndex].content = `❌ ${errorMessage}`
+      messages.value[aiMsgIndex].loading = false
+      message.error(errorMessage)
+    } catch (parseError) {
+      console.error('解析错误事件失败:', parseError, '原始数据:', event.data)
+      messages.value[aiMsgIndex].content = '❌ 生成过程中出现错误'
+      messages.value[aiMsgIndex].loading = false
+      message.error('生成过程中出现错误')
+    }
+    streamDone = true
+    generating.value = false
+    eventSource?.close()
+    eventSource = null
+  })
+
   eventSource.onerror = () => {
     if (!streamDone) {
       finishGeneration()

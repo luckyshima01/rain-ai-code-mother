@@ -15,6 +15,8 @@ import cloud.raina.rainaicodemother.model.entity.App;
 import cloud.raina.rainaicodemother.model.entity.User;
 import cloud.raina.rainaicodemother.model.enums.CodeGenTypeEnum;
 import cloud.raina.rainaicodemother.model.vo.AppVO;
+import cloud.raina.rainaicodemother.ratelimiter.annotation.RateLimit;
+import cloud.raina.rainaicodemother.ratelimiter.enums.RateLimitType;
 import cloud.raina.rainaicodemother.service.AppService;
 import cloud.raina.rainaicodemother.service.ProjectDownloadService;
 import cloud.raina.rainaicodemother.service.UserService;
@@ -60,6 +62,7 @@ public class AppController {
     private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
 
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(limitType = RateLimitType.USER,rate = 5,rateInterval = 60,message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
                                                        HttpServletRequest request) {
@@ -257,7 +260,7 @@ public class AppController {
     @PostMapping("/good/list/page/vo")
     @Cacheable(
             value = "good_app_page",
-            key = "T(cloud.raina.rainaicodemother.utils.CacheKeyUtils).generateCKey(#appQueryRequest)",
+            key = "T(cloud.raina.rainaicodemother.utils.CacheKeyUtils).generateKey(#appQueryRequest)",
             condition = "#appQueryRequest.pageNum<=10"
     )
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
