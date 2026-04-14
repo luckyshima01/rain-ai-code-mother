@@ -3,12 +3,9 @@ package cloud.raina.rainaicodemother.core.handler;
 import cloud.raina.rainaicodemother.ai.model.message.*;
 import cloud.raina.rainaicodemother.ai.tools.BaseTool;
 import cloud.raina.rainaicodemother.ai.tools.ToolManager;
-import cloud.raina.rainaicodemother.constant.AppConstant;
-import cloud.raina.rainaicodemother.core.builder.VueProjectBuilder;
 import cloud.raina.rainaicodemother.model.entity.User;
 import cloud.raina.rainaicodemother.model.enums.ChatHistoryMessageTypeEnum;
 import cloud.raina.rainaicodemother.service.ChatHistoryService;
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
@@ -27,8 +24,7 @@ import java.util.Set;
 @Slf4j
 @Component
 public class JsonMessageStreamHandler {
-    @Resource
-    private VueProjectBuilder vueProjectBuilder;
+
     @Resource
     private ToolManager toolManager;
 
@@ -59,8 +55,6 @@ public class JsonMessageStreamHandler {
                     // 流式响应完成后，添加 AI 消息到对话历史
                     String aiResponse = chatHistoryStringBuilder.toString();
                     chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
-                    vueProjectBuilder.buildProjectAsync(projectPath);
                 })
                 .doOnError(error -> {
                     // 如果AI回复失败，也要记录错误消息
