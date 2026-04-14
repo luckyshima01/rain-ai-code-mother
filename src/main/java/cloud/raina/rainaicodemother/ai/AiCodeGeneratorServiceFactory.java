@@ -1,5 +1,7 @@
 package cloud.raina.rainaicodemother.ai;
 
+import cloud.raina.rainaicodemother.ai.guardrail.PromptSafetyInputGuardrail;
+import cloud.raina.rainaicodemother.ai.guardrail.RetryOutputGuardrail;
 import cloud.raina.rainaicodemother.ai.tools.*;
 import cloud.raina.rainaicodemother.exception.BusinessException;
 import cloud.raina.rainaicodemother.exception.ErrorCode;
@@ -96,6 +98,9 @@ public class AiCodeGeneratorServiceFactory {
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
                                 toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
                         ))
+                        .maxSequentialToolsInvocations(20) //最多连续调用 20 次工具
+                        .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入合规检查
+//                        .outputGuardrails(new RetryOutputGuardrail()) // 添加输出合规检查，添加后会影响流式输出，不推荐使用
                         .build();
             }
             case HTML, MULTI_FILE -> {
@@ -105,6 +110,8 @@ public class AiCodeGeneratorServiceFactory {
                         .chatModel(chatModel)
                         .streamingChatModel(openAiStreamingChatModel)
                         .chatMemory(chatMemory)
+                        .inputGuardrails(new PromptSafetyInputGuardrail()) // 添加输入合规检查
+//                        .outputGuardrails(new RetryOutputGuardrail()) // 添加输出合规检查，添加后会影响流式输出，不推荐使用
                         .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
