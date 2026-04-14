@@ -6,34 +6,38 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 
 @Configuration
-@ConfigurationProperties(prefix = "langchain4j.open-ai.chat-model")
+@ConfigurationProperties(prefix = "langchain4j.open-ai.streaming-chat-model")
 @Data
-public class ReasoningSteamingChatModelConfig {
+public class StreamingChatModelConfig {
+
     private String baseUrl;
+
     private String apiKey;
 
-    /**
-     * 创建一个流式模型（用于 Vue 项目生成，带工具调用）
-     *
-     * @return
-     */
+    private String modelName;
+
+    private Integer maxTokens;
+
+    private Double temperature;
+
+    private boolean logRequests;
+
+    private boolean logResponses;
+
     @Bean
-    public StreamingChatModel reasoningSteamingChatModel() {
-        // 测试环境使用
-        final String modelName = "deepseek-chat";
-        final int maxTokens = 8192;
-        // 生产环境使用
-//        final String modelName = "deepseek-reasoner";
-//        final int maxTokens = 32768;
+    @Scope("prototype")
+    public StreamingChatModel streamingChatModelPrototype() {
         return OpenAiStreamingChatModel.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
                 .modelName(modelName)
                 .maxTokens(maxTokens)
-                .logRequests(true)
-                .logResponses(true)
+                .temperature(temperature)
+                .logRequests(logRequests)
+                .logResponses(logResponses)
                 .build();
     }
 }
