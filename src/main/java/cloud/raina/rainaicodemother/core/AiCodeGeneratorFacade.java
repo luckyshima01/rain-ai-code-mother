@@ -156,6 +156,12 @@ public class AiCodeGeneratorFacade {
                 String completeCode = codeBuilder.toString();
                 // 使用执行器解析代码
                 Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenTypeEnum);
+                // 方案三（上层防线）：若 HTML 解析结果为空（AI 未输出有效代码块），跳过写文件，保留上次页面
+                if (parsedResult instanceof HtmlCodeResult htmlResult
+                        && (htmlResult.getHtmlCode() == null || htmlResult.getHtmlCode().isBlank())) {
+                    log.warn("AI 未生成有效 HTML 代码块，跳过文件保存（appId={}）", appId);
+                    return;
+                }
                 // 使用执行器保存代码
                 File saveDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenTypeEnum, appId);
                 log.info("保存成功，目录为{}", saveDir.getAbsolutePath());
