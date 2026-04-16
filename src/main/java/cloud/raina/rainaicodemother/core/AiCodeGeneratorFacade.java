@@ -151,23 +151,26 @@ public class AiCodeGeneratorFacade {
             // 实时收集代码片段
             codeBuilder.append(chunk);
         }).doOnComplete(() -> {
-            // 流式返回完成后，保存代码
-            try {
-                String completeCode = codeBuilder.toString();
-                // 使用执行器解析代码
-                Object parsedResult = CodeParserExecutor.executeParser(completeCode, codeGenTypeEnum);
-                // 方案三（上层防线）：若 HTML 解析结果为空（AI 未输出有效代码块），跳过写文件，保留上次页面
-                if (parsedResult instanceof HtmlCodeResult htmlResult
-                        && (htmlResult.getHtmlCode() == null || htmlResult.getHtmlCode().isBlank())) {
-                    log.warn("AI 未生成有效 HTML 代码块，跳过文件保存（appId={}）", appId);
-                    return;
+            // 在 doOnComplete 内抢先拿到快照，然后将阻塞 I/O 交给虚拟线程执行，
+            // 让 doOnComplete 立即返回，使 completion 信号能即刻向下传播并触发 done 事件
+            String snapshot = codeBuilder.toString();
+            Thread.startVirtualThread(() -> {
+                try {
+                    // 使用执行器解析代码
+                    Object parsedResult = CodeParserExecutor.executeParser(snapshot, codeGenTypeEnum);
+                    // 若 HTML 解析结果为空（AI 未输出有效代码块），跳过写文件，保留上次页面
+                    if (parsedResult instanceof HtmlCodeResult htmlResult
+                            && (htmlResult.getHtmlCode() == null || htmlResult.getHtmlCode().isBlank())) {
+                        log.warn("AI 未生成有效 HTML 代码块，跳过文件保存（appId={}）", appId);
+                        return;
+                    }
+                    // 使用执行器保存代码
+                    File saveDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenTypeEnum, appId);
+                    log.info("保存成功，目录为{}", saveDir.getAbsolutePath());
+                } catch (Exception e) {
+                    log.error("保存失败：{}", e.getMessage());
                 }
-                // 使用执行器保存代码
-                File saveDir = CodeFileSaverExecutor.executeSaver(parsedResult, codeGenTypeEnum, appId);
-                log.info("保存成功，目录为{}", saveDir.getAbsolutePath());
-            } catch (Exception e) {
-                log.error("保存失败：{}", e.getMessage());
-            }
+            });
         });
     }
 

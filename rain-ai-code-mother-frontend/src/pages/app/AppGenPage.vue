@@ -467,21 +467,34 @@ const sendMessage = (content: string) => {
   }
 
   let streamDone = false
+  // 用于 onerror 容错等待的定时器
+  let onerrorTimer: ReturnType<typeof setTimeout> | null = null
+
+  const clearOnerrorTimer = () => {
+    if (onerrorTimer !== null) {
+      clearTimeout(onerrorTimer)
+      onerrorTimer = null
+    }
+  }
 
   const finishGeneration = () => {
+    clearOnerrorTimer()
     if (eventSource) {
       eventSource.close()
       eventSource = null
     }
     messages.value[aiMsgIndex].loading = false
     generating.value = false
-    // Always show preview after a completed generation
+    // 刷新应用详情并显示预览
     fetchAppDetail().then(() => {
       if (app.value?.codeGenType) {
         previewUrl.value = getStaticPreviewUrl(app.value.codeGenType, appId)
       }
     })
     scrollToBottom()
+    // 延迟 1.5 秒后再刷新一次历史记录：
+    // 后端 DB 写入已移至虚拟线程（异步），留出窗口期确保 AI 消息已落库
+    setTimeout(() => loadHistory(), 1500)
   }
 
   const url = `${API_BASE_URL}/app/chat/gen/code?appId=${appId}&message=${encodeURIComponent(content)}`
@@ -504,6 +517,7 @@ const sendMessage = (content: string) => {
 
   eventSource.addEventListener('business-error', (event: MessageEvent) => {
     if (streamDone) return
+    clearOnerrorTimer()
     try {
       const errorData = JSON.parse(event.data)
       console.error('SSE业务错误事件:', errorData)
@@ -523,10 +537,18 @@ const sendMessage = (content: string) => {
     eventSource = null
   })
 
+  // onerror 不立即关闭连接，而是等待 5 秒：
+  // 正常结束时 done 事件会先于连接关闭到达，届时 clearOnerrorTimer() 取消定时器；
+  // 若 5 秒后仍未收到 done，则视为真正的异常，执行 finishGeneration 兜底。
   eventSource.onerror = () => {
-    if (!streamDone) {
-      finishGeneration()
-    }
+    if (streamDone) return
+    if (onerrorTimer !== null) return  // 已有等待中的定时器，不重复设置
+    onerrorTimer = setTimeout(() => {
+      onerrorTimer = null
+      if (!streamDone) {
+        finishGeneration()
+      }
+    }, 5000)
   }
 }
 
@@ -627,8 +649,9 @@ onMounted(async () => {
   await fetchAppDetail()
   await loadHistory()
 
-  // Show preview if app is already generated and there are enough messages
-  if (app.value?.codeGenType && messages.value.length >= 2) {
+  // 只要有任意历史消息，就说明该应用曾经生成过代码，尝试显示预览；
+  // 原先的 >= 2 判断在 AI 消息尚未落库时会因只有 1 条用户消息而跳过预览
+  if (app.value?.codeGenType && messages.value.length >= 1) {
     previewUrl.value = getStaticPreviewUrl(app.value.codeGenType, appId)
   }
 

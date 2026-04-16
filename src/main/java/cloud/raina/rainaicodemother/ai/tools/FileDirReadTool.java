@@ -122,7 +122,7 @@ public class FileDirReadTool extends BaseTool {
         if (StrUtil.isEmpty(relativeDirPath)) {
             relativeDirPath = "根目录";
         }
-        return String.format("[工具调用] %s %s", getDisplayName(), relativeDirPath);
+        return String.format("📁 [工具调用] %s %s", getDisplayName(), relativeDirPath);
     }
 
 }
