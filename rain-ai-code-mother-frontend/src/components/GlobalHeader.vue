@@ -95,7 +95,7 @@ const doLogout = async () => {
         </a-dropdown>
       </div>
       <div v-else>
-        <a-button type="primary" href="/user/login">登录</a-button>
+        <a-button type="primary" @click="router.push('/user/login')">登录</a-button>
       </div>
     </div>
   </div>
