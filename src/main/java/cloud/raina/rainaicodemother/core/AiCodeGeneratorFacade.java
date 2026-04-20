@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI 代码生成门面类，组合代码生成和保存功能
@@ -122,10 +123,39 @@ public class AiCodeGeneratorFacade {
                         sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
                     })
                     .onCompleteResponse((ChatResponse response) -> {
-                        // 执行 Vue 项目构建（同步执行，确保预览时项目已就绪）
                         String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + "vue_project_" + appId;
-                        vueProjectBuilder.buildProject(projectPath);
-                        sink.complete();
+                        AtomicBoolean buildFinished = new AtomicBoolean(false);
+
+                        // keepalive 线程：每 20 秒向前端发一次空消息，防止 nginx 等代理因
+                        // 60 秒空闲超时（proxy_read_timeout）而强制断开 SSE 连接
+                        Thread.startVirtualThread(() -> {
+                            while (!buildFinished.get()) {
+                                try {
+                                    Thread.sleep(20_000);
+                                    if (!buildFinished.get()) {
+                                        // 发送空内容 AI 消息，前端拼接空字符串不影响显示
+                                        sink.next(JSONUtil.toJsonStr(new AiResponseMessage("")));
+                                    }
+                                } catch (InterruptedException ignored) {
+                                    break;
+                                }
+                            }
+                        });
+
+                        // 构建线程：异步执行 npm install + npm run build，完成后关闭流
+                        Thread.startVirtualThread(() -> {
+                            try {
+                                sink.next(JSONUtil.toJsonStr(new AiResponseMessage("\n\n⏳ 正在构建 Vue 项目，请稍候...\n\n")));
+                                boolean success = vueProjectBuilder.buildProject(projectPath);
+                                String resultMsg = success
+                                        ? "\n\n✅ Vue 项目构建完成！\n\n"
+                                        : "\n\n❌ Vue 项目构建失败，请重试\n\n";
+                                sink.next(JSONUtil.toJsonStr(new AiResponseMessage(resultMsg)));
+                            } finally {
+                                buildFinished.set(true);
+                                sink.complete();
+                            }
+                        });
                     })
                     .onError((Throwable error) -> {
                         error.printStackTrace();

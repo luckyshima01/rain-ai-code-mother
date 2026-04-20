@@ -83,9 +83,12 @@ public class AppController {
                             .build();
                 })
                 .concatWith(Mono.just(
-                        // 添加结束标记
+                        // 结束标记：必须带 data 字段，否则 SSE 规范规定 data buffer 为空时
+                        // 浏览器会静默丢弃该事件，导致 addEventListener('done') 永远不触发，
+                        // EventSource 会在 HTTP 关闭后自动重连，引发重复请求和重复数据
                         ServerSentEvent.<String>builder()
                                 .event("done")
+                                .data("")
                                 .build()
                 ));
     }

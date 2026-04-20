@@ -537,11 +537,16 @@ const sendMessage = (content: string) => {
     eventSource = null
   })
 
-  // onerror 不立即关闭连接，而是等待 5 秒：
-  // 正常结束时 done 事件会先于连接关闭到达，届时 clearOnerrorTimer() 取消定时器；
-  // 若 5 秒后仍未收到 done，则视为真正的异常，执行 finishGeneration 兜底。
+  // onerror 立即关闭 EventSource，防止浏览器自动重连：
+  // EventSource 在连接断开后会自动重连（默认约 3 秒），重连会向后端发起新请求，
+  // 导致用户消息被重复写入数据库、AI 重复生成代码。
+  // 关闭后设置 5 秒兜底定时器：正常情况下 done 事件已先到达（streamDone=true），
+  // 定时器不会触发；若真的异常（done 未收到），5 秒后执行 finishGeneration 兜底。
   eventSource.onerror = () => {
     if (streamDone) return
+    // 立即关闭，阻止浏览器自动重连
+    eventSource?.close()
+    eventSource = null
     if (onerrorTimer !== null) return  // 已有等待中的定时器，不重复设置
     onerrorTimer = setTimeout(() => {
       onerrorTimer = null
