@@ -18,6 +18,8 @@ import cloud.raina.rainaicodemother.model.enums.ChatHistoryMessageTypeEnum;
 import cloud.raina.rainaicodemother.model.enums.CodeGenTypeEnum;
 import cloud.raina.rainaicodemother.model.vo.AppVO;
 import cloud.raina.rainaicodemother.model.vo.UserVO;
+import cloud.raina.rainaicodemother.monitor.MonitorContext;
+import cloud.raina.rainaicodemother.monitor.MonitorContextHolder;
 import cloud.raina.rainaicodemother.service.AppService;
 import cloud.raina.rainaicodemother.service.ChatHistoryService;
 import cloud.raina.rainaicodemother.service.ScreenshotService;
@@ -87,10 +89,21 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         ThrowUtils.throwIf(codeGenType == null, ErrorCode.PARAMS_ERROR, "应用代码生成类型错误");
         // 5.在调用 AI 前，先保存用户消息到数据库中
         chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
-        // 6.调用 AI 生成代码（流式返回）
+        // 6.设置监控上下文（用户ID 和应用 ID）
+        MonitorContextHolder.setContext(
+                MonitorContext.builder()
+                        .userId(loginUser.getId().toString())
+                        .appId(appId.toString())
+                        .build()
+        );
+        // 7.调用 AI 生成代码（流式返回）
         Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
-        // 7.收集 AI 响应的内容，并且在完成后保存记录到对话历史
-        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum);
+        // 8.收集 AI 响应的内容，并且在完成后保存记录到对话历史
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum)
+                .doFinally(signalType -> {
+                    // 流结束时清理（无论正常结束、异常结束、取消结束）
+                    MonitorContextHolder.clearContext();
+                });
     }
 
     @Override
